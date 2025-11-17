@@ -667,29 +667,32 @@ if st.session_state.results_directory and os.path.exists(st.session_state.result
             st.error(f"Error listing files: {e}")
 
 # Show progress bar when running
-if current_status in ['running', 'starting'] and st.session_state.analysis_params:
+# Show progress bar whenever we have analysis params and output (running or finishing)
+if st.session_state.analysis_params and st.session_state.last_output:
     progress, current_stage, completed, total = calculate_progress(
         st.session_state.last_output, 
         st.session_state.analysis_params
     )
     
     st.markdown("### 📊 Progress")
-    st.progress(progress / 100, text=f"{progress}% - {current_stage}")
     
-    # Show detailed module completion
-    if completed > 0:
-        st.caption(f"✅ Completed {completed} unique modules")
+    # If finished, show 100%, otherwise show calculated progress
+    if current_status == 'finished':
+        st.progress(1.0, text="100% - ✅ Analysis Complete!")
+    else:
+        st.progress(progress / 100, text=f"{progress}% - {current_stage}")
+        
+        # Show detailed module completion
+        if completed > 0:
+            st.caption(f"✅ Completed {completed} unique modules")
     
     st.markdown("---")
 
-# Show progress bar for finished status too (at 100%)
-if current_status == 'finished' and st.session_state.last_output:
-    st.markdown("### 📊 Progress")
-    st.progress(1.0, text="100% - ✅ Analysis Complete!")
-    st.markdown("---")
+# Auto-refresh while running OR if thread is alive but status hasn't updated yet
+should_refresh = (current_status in ['running', 'starting']) or \
+                 (st.session_state.run_thread and st.session_state.run_thread.is_alive())
 
-# Auto-refresh while running with helpful info
-if current_status in ['running', 'starting']:
+if should_refresh:
     # Parse timing information from output
     time_info = ""
     if st.session_state.last_output:
