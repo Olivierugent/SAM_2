@@ -12,8 +12,6 @@ import numpy as np  # For numerical calculations
 import os  # For file handling
 import pandas as pd  # For data manipulation
 import time  # For timing the code
-import tkinter as tk  # For creating a graphical user interface
-from tkinter import ttk  # For creating a graphical user interface
 
 # Record the start time of the script
 t_start = time.time()
@@ -22,20 +20,21 @@ t_start = time.time()
 # This allows external GUIs to import this module for defaults without triggering file I/O.
 AV_SKIP_LOAD = os.environ.get('AV_SKIP_LOAD', '0')
 
+# Activation of GUI (disabled by default - tkinter not needed for web GUIs)
+graphical_user_interface = 0
+
 # Function to update GUI settings and close the window
 def update_settings():   
     """
     Updates global settings based on GUI input and closes the GUI.
+    Requires tkinter to be available.
     """
     global PDPg_fundamental, PDPg_buffer, PDPg_rough, PDPg_bufferrough
     PDPg_fundamental = fundamental_var.get()
     PDPg_buffer = buffer_var.get()
     PDPg_rough = rough_var.get()  
     PDPg_bufferrough = bufferrough_var.get()   
-    root.destroy()  # Close the window
-
-# Activation of GUI
-graphical_user_interface = 0 
+    root.destroy()  # Close the window 
 
 # !!! Default setting for PDP types; this has to be changed to say which PDP to calculate.
 PDPg_fundamental = 1 # !!!must always be 1 , so this always has to be calculated.
@@ -99,6 +98,10 @@ curr_point_id = 0
 
 # Initialize the GUI if enabled
 if graphical_user_interface == 1:
+    # Import tkinter only when GUI is needed (avoids issues in headless environments)
+    import tkinter as tk
+    from tkinter import ttk
+    
     # Create a basic tkinter window
     root = tk.Tk()
     root.title("Settings")
