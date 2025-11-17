@@ -47,9 +47,74 @@ if 'analysis_finished' not in st.session_state:
     st.session_state.analysis_finished = False
 if 'log_file_path' not in st.session_state:
     st.session_state.log_file_path = None
+if 'analysis_params' not in st.session_state:
+    st.session_state.analysis_params = None
+if 'results_directory' not in st.session_state:
+    st.session_state.results_directory = None
 
 # Password configuration (you can change this or use environment variable)
-CORRECT_PASSWORD = os.environ.get('APP_PASSWORD', 'GIST')  # Default password or set via environment
+CORRECT_PASSWORD = os.environ.get('APP_PASSWORD', 'SAM2024')  # Default password or set via environment
+
+
+def calculate_progress(output_text, params):
+    """
+    Calculate analysis progress based on completed modules and output.
+    Returns (progress_percentage, current_stage, completed_tasks, total_tasks)
+    """
+    if not output_text:
+        return 0, "Initializing...", 0, 1
+    
+    # Count completed modules by looking for "Time elapsed for running module" messages
+    completed_modules = []
+    
+    # Parse all completed modules from output
+    for line in output_text.split('\n'):
+        if 'Time elapsed for running module' in line:
+            # Extract module name
+            if '"N_VA_StaticAbsolute"' in line:
+                completed_modules.append('Static Absolute')
+            elif '"N_VA_TennisCourt"' in line:
+                completed_modules.append('Tennis Court')
+            elif '"N_PDP"' in line:
+                completed_modules.append('PDP Calculation')
+            elif '"N_VA_HeatMap"' in line:
+                completed_modules.append('Heatmap')
+            elif '"N_VA_HClust"' in line:
+                completed_modules.append('Hierarchical Clustering')
+            elif '"N_VA_Mds"' in line:
+                completed_modules.append('MDS')
+            elif '"N_VA_TopK"' in line:
+                completed_modules.append('Top-K Analysis')
+            elif '"N_T_OB"' in line:
+                completed_modules.append('Buffer Transform')
+            elif '"N_VA_InequalityMatrices"' in line:
+                completed_modules.append('Inequality Matrices')
+    
+    # Determine current stage
+    if 'ALL PDP PROCESSING COMPLETE' in output_text:
+        current_stage = "✅ Analysis Complete!"
+        progress = 100
+    elif 'STARTING PDP: BUFFER' in output_text:
+        current_stage = "Processing Buffer PDP..."
+        progress = 60
+    elif 'STARTING PDP: FUNDAMENTAL' in output_text:
+        current_stage = "Processing Fundamental PDP..."
+        progress = 30
+    elif 'STARTING ANALYSIS' in output_text:
+        current_stage = "Initializing..."
+        progress = 10
+    else:
+        current_stage = "Starting..."
+        progress = 5
+    
+    # Calculate more accurate progress based on completed modules
+    if len(completed_modules) > 0:
+        # Estimate based on typical run (adjust based on actual modules)
+        progress = min(95, 10 + (len(completed_modules) * 5))
+    
+    total_modules = len(set(completed_modules))
+    
+    return progress, current_stage, total_modules, total_modules
 
 
 # Password configuration (you can change this or use environment variable)
@@ -128,17 +193,17 @@ def run_moving_objects_in_background(params):
     Writes output to a log file for real-time monitoring.
     """
     try:
-        st.session_state.last_status = 'running'
-        st.session_state.last_output = 'Starting analysis...\n'
-        st.session_state.analysis_finished = False
-        
         # Get results dir first
         results_dir = params.get('results_dir', os.getcwd())
         os.makedirs(results_dir, exist_ok=True)
         
-        # Create log file immediately for debugging
+        # Create status and log files
         log_file_path = os.path.join(results_dir, 'analysis_log.txt')
-        st.session_state.log_file_path = log_file_path
+        status_file_path = os.path.join(results_dir, 'analysis_status.txt')
+        
+        # Write initial status
+        with open(status_file_path, 'w', encoding='utf-8') as f:
+            f.write('running')
         
         with open(log_file_path, 'w', encoding='utf-8') as debug_log:
             debug_log.write("="*60 + "\n")
@@ -154,8 +219,8 @@ def run_moving_objects_in_background(params):
             with open(log_file_path, 'a', encoding='utf-8') as debug_log:
                 debug_log.write(f'❌ ERROR: Dataset file not found: {dataset_name}\n')
                 debug_log.write(f'📂 Looking in: {os.path.abspath(dataset_name)}\n')
-            st.session_state.last_status = 'error'
-            st.session_state.last_output = f'❌ ERROR: Dataset file not found: {dataset_name}'
+            with open(status_file_path, 'w', encoding='utf-8') as f:
+                f.write('error')
             return
         
         # Set environment variables for av module
@@ -214,42 +279,35 @@ def run_moving_objects_in_background(params):
             import N_Moving_Objects
             importlib.reload(N_Moving_Objects)
             
-            # Check for stop request periodically
-            if st.session_state.stop_requested:
-                print('\n⏹️ Analysis stopped by user request.')
-                st.session_state.last_status = 'stopped'
-            else:
-                print('\n✅ Analysis completed successfully!')
-                st.session_state.last_status = 'finished'
-                st.session_state.analysis_finished = True
+            print('\n✅ Analysis completed successfully!')
+            with open(status_file_path, 'w', encoding='utf-8') as f:
+                f.write('finished')
                 
         except Exception as e:
             print(f'\n❌ ERROR during analysis:\n{str(e)}')
             import traceback
             traceback.print_exc()
-            st.session_state.last_status = 'error'
+            with open(status_file_path, 'w', encoding='utf-8') as f:
+                f.write('error')
         
         finally:
             # Restore stdout/stderr
             sys.stdout = old_stdout
             sys.stderr = old_stderr
             log_file.close()
-            
-            # Read final output
-            try:
-                with open(log_file_path, 'r', encoding='utf-8') as f:
-                    st.session_state.last_output = f.read()
-            except:
-                pass
         
     except Exception as e:
-        st.session_state.last_status = 'error'
-        st.session_state.last_output = f'❌ CRITICAL ERROR:\n{str(e)}'
+        # Critical error - write to status file if possible
+        try:
+            status_file_path = os.path.join(params.get('results_dir', os.getcwd()), 'analysis_status.txt')
+            with open(status_file_path, 'w', encoding='utf-8') as f:
+                f.write('error')
+        except:
+            pass
     
     finally:
         # Reset environment
         os.environ['AV_SKIP_LOAD'] = '1'
-        st.session_state.run_thread = None
 
 
 # ============================================================================
@@ -444,17 +502,8 @@ with col_run1:
         # Start analysis in background thread
         if st.session_state.run_thread is None or not st.session_state.run_thread.is_alive():
             st.session_state.stop_requested = False
-            
-            # DEBUG: Write a test file to verify results_dir is accessible
-            try:
-                os.makedirs(results_dir, exist_ok=True)
-                test_file = os.path.join(results_dir, '_button_clicked.txt')
-                with open(test_file, 'w') as f:
-                    f.write(f"Button clicked at {time.time()}\n")
-                    f.write(f"Dataset: {dataset_name}\n")
-                    f.write(f"Results dir: {results_dir}\n")
-            except Exception as e:
-                st.error(f"DEBUG: Could not create test file: {e}")
+            st.session_state.analysis_params = params  # Store params for progress tracking
+            st.session_state.results_directory = results_dir  # Store results directory
             
             st.session_state.run_thread = threading.Thread(
                 target=run_moving_objects_in_background, 
@@ -463,7 +512,13 @@ with col_run1:
             )
             st.session_state.run_thread.start()
             st.success("✅ Analysis started in background!")
-            st.info(f"📂 Check results in: {results_dir}")
+            st.info(f"📂 Results will be saved to: {results_dir}")
+            
+            # Initialize status tracking
+            status_file = os.path.join(results_dir, 'analysis_status.txt')
+            with open(status_file, 'w', encoding='utf-8') as f:
+                f.write('starting')
+            
             time.sleep(0.5)
             st.rerun()
         else:
@@ -512,9 +567,69 @@ with col_run4:
 st.markdown("---")
 st.markdown("### 📊 Analysis Status")
 
+# EXTENSIVE DEBUGGING
+st.markdown("#### 🔍 Debug Information")
+debug_col1, debug_col2 = st.columns(2)
+with debug_col1:
+    st.write(f"**Results Dir Set:** {st.session_state.results_directory is not None}")
+    if st.session_state.results_directory:
+        st.write(f"**Results Dir:** `{st.session_state.results_directory}`")
+        st.write(f"**Dir Exists:** {os.path.exists(st.session_state.results_directory)}")
+with debug_col2:
+    st.write(f"**Analysis Params Set:** {st.session_state.analysis_params is not None}")
+    st.write(f"**Thread Alive:** {st.session_state.run_thread is not None and st.session_state.run_thread.is_alive() if st.session_state.run_thread else False}")
+
+# Read status from file if analysis was started
+current_status = 'idle'
+status_file_exists = False
+log_file_exists = False
+
+if st.session_state.results_directory and os.path.exists(st.session_state.results_directory):
+    status_file = os.path.join(st.session_state.results_directory, 'analysis_status.txt')
+    log_file = os.path.join(st.session_state.results_directory, 'analysis_log.txt')
+    
+    status_file_exists = os.path.exists(status_file)
+    log_file_exists = os.path.exists(log_file)
+    
+    st.write(f"**Status File Exists:** {status_file_exists}")
+    st.write(f"**Log File Exists:** {log_file_exists}")
+    
+    if status_file_exists:
+        try:
+            with open(status_file, 'r', encoding='utf-8') as f:
+                current_status = f.read().strip()
+                st.write(f"**Status from file:** `{current_status}`")
+        except Exception as e:
+            st.error(f"Error reading status: {e}")
+            current_status = 'error'
+    
+    # Read log output
+    if log_file_exists:
+        try:
+            with open(log_file, 'r', encoding='utf-8') as f:
+                st.session_state.last_output = f.read()
+                st.write(f"**Log size:** {len(st.session_state.last_output)} chars")
+        except Exception as e:
+            st.error(f"Error reading log: {e}")
+    
+    # Update analysis_finished flag
+    if current_status == 'finished':
+        st.session_state.analysis_finished = True
+        st.session_state.last_status = 'finished'
+    elif current_status == 'error':
+        st.session_state.last_status = 'error'
+    elif current_status == 'running':
+        st.session_state.last_status = 'running'
+else:
+    current_status = st.session_state.last_status
+    st.write(f"**Using session status:** `{current_status}`")
+
+st.markdown("---")
+
 # Status indicator
 status_emoji = {
     'idle': '💤',
+    'starting': '🔄',
     'running': '⚙️',
     'finished': '✅',
     'stopped': '⏹️',
@@ -523,66 +638,199 @@ status_emoji = {
 
 status_color = {
     'idle': 'gray',
+    'starting': 'blue',
     'running': 'blue',
     'finished': 'green',
     'stopped': 'orange',
     'error': 'red'
 }
 
-current_status = st.session_state.last_status
-st.markdown(f"**Status:** :{status_color[current_status]}[{status_emoji[current_status]} {current_status.upper()}]")
+st.markdown(f"**Status:** :{status_color.get(current_status, 'gray')}[{status_emoji.get(current_status, '❓')} {current_status.upper()}]")
 
-# DEBUG: Show log file path and existence
-if st.session_state.log_file_path:
-    log_exists = os.path.exists(st.session_state.log_file_path)
-    st.markdown(f"**Debug:** Log file: `{st.session_state.log_file_path}` (exists: {log_exists})")
-    if log_exists:
+# Manual refresh button
+if st.button("🔄 Force Refresh", type="secondary"):
+    st.rerun()
+
+# Show files in results directory if it exists
+if st.session_state.results_directory and os.path.exists(st.session_state.results_directory):
+    with st.expander("📁 Files in Results Directory", expanded=False):
         try:
-            file_size = os.path.getsize(st.session_state.log_file_path)
-            st.markdown(f"**Debug:** Log file size: {file_size} bytes")
-        except:
-            pass
+            files = os.listdir(st.session_state.results_directory)
+            st.write(f"**Total files:** {len(files)}")
+            for f in files[:20]:  # Show first 20
+                st.text(f"  • {f}")
+            if len(files) > 20:
+                st.text(f"  ... and {len(files) - 20} more")
+        except Exception as e:
+            st.error(f"Error listing files: {e}")
+
+# Show progress bar when running
+if current_status in ['running', 'starting'] and st.session_state.analysis_params:
+    progress, current_stage, completed, total = calculate_progress(
+        st.session_state.last_output, 
+        st.session_state.analysis_params
+    )
+    
+    st.markdown("### 📊 Progress")
+    st.progress(progress / 100, text=f"{progress}% - {current_stage}")
+    
+    # Show detailed module completion
+    if completed > 0:
+        st.caption(f"✅ Completed {completed} unique modules")
+    
+    st.markdown("---")
+
+# Show progress bar for finished status too (at 100%)
+if current_status == 'finished' and st.session_state.last_output:
+    st.markdown("### 📊 Progress")
+    st.progress(1.0, text="100% - ✅ Analysis Complete!")
+    st.markdown("---")
 
 # Auto-refresh while running with helpful info
-if current_status == 'running':
-    # Read log file for real-time updates
-    if st.session_state.log_file_path and os.path.exists(st.session_state.log_file_path):
-        try:
-            with open(st.session_state.log_file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                st.session_state.last_output = content
-                st.markdown(f"**Debug:** Read {len(content)} characters from log file")
-        except Exception as e:
-            st.error(f"⚠️ Error reading log: {e}")
-            st.session_state.last_output += f"\n⚠️ Error reading log: {e}"
-    else:
-        st.warning(f"⚠️ Log file not found: {st.session_state.log_file_path}")
+if current_status in ['running', 'starting']:
+    # Show live output in expander
+    with st.expander("📟 Live Output Log", expanded=False):
+        if st.session_state.last_output:
+            st.code(st.session_state.last_output[-3000:], language='text')  # Last 3000 chars
+        else:
+            st.info("⏳ Waiting for output...")
     
-    st.info("""
-    ⏳ **Analysis running...** 
-    - Page auto-refreshes every 1 second
-    - Real-time progress updates shown below
-    - Timer shows elapsed time and estimated completion
-    - TQDM progress bars track each PDP stage
-    """)
-    
-    # Show live output immediately while running
-    if st.session_state.last_output:
-        st.markdown("### 📟 Live Output")
-        # Use code block instead of text_area for better real-time updates
-        st.code(st.session_state.last_output, language='text')
-    else:
-        st.info("⏳ Waiting for analysis to start... (no output yet)")
-    
-    st.markdown(f"**Debug:** Output length: {len(st.session_state.last_output)} characters")
-    
-    time.sleep(1)  # Refresh every 1 second
+    time.sleep(2)  # Refresh every 2 seconds
     st.rerun()
 
 # Output display (when not running)
-elif st.session_state.last_output:
-    with st.expander("📄 Analysis Output", expanded=(current_status in ['finished', 'error'])):
+elif st.session_state.last_output and current_status in ['finished', 'error']:
+    with st.expander("📄 Analysis Output Log", expanded=(current_status == 'error')):
         st.code(st.session_state.last_output, language='text')
+
+# ============================================================================
+# RESULTS VIEWER - VISUALIZATIONS
+# ============================================================================
+# Show results if status is finished OR if we have a results directory with files
+show_results = False
+if current_status == 'finished' and st.session_state.results_directory:
+    show_results = True
+elif st.session_state.results_directory and os.path.exists(st.session_state.results_directory):
+    # Check if there are any PNG files
+    try:
+        files = os.listdir(st.session_state.results_directory)
+        if any(f.lower().endswith('.png') for f in files):
+            show_results = True
+    except:
+        pass
+
+if show_results:
+    st.markdown("---")
+    st.markdown("## 🎨 Analysis Results - Visualizations")
+    
+    browse_results_dir = st.session_state.results_directory
+    
+    if os.path.exists(browse_results_dir):
+        try:
+            # Collect all PNG files
+            visualization_files = {
+                'Static Absolute': [],
+                'Heatmaps': [],
+                'Hierarchical Clustering': [],
+                'MDS': [],
+                'Top-K': [],
+                'Tennis Court': [],
+                'Inequality Matrices': [],
+                'Other': []
+            }
+            
+            all_files_for_download = []
+            
+            for root, dirs, files in os.walk(browse_results_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(file_path, browse_results_dir)
+                    file_lower = file.lower()
+                    
+                    # Skip Python scripts and debug files
+                    if file_lower.endswith('.py') or file_lower == '_button_clicked.txt':
+                        continue
+                    
+                    all_files_for_download.append((rel_path, file_path))
+                    
+                    # Categorize PNG images for display
+                    if file_lower.endswith('.png') or file_lower.endswith('.jpg') or file_lower.endswith('.jpeg'):
+                        # Check if in TennisCourt folder
+                        if 'tenniscourt' in rel_path.lower() or 'tennis_court' in rel_path.lower():
+                            visualization_files['Tennis Court'].append((file, rel_path, file_path))
+                        elif 'static' in file_lower and 'absolute' in file_lower:
+                            visualization_files['Static Absolute'].append((file, rel_path, file_path))
+                        elif 'heatmap' in file_lower:
+                            visualization_files['Heatmaps'].append((file, rel_path, file_path))
+                        elif 'hclust' in file_lower or 'dendrogram' in file_lower or 'cluster' in file_lower:
+                            visualization_files['Hierarchical Clustering'].append((file, rel_path, file_path))
+                        elif 'mds' in file_lower:
+                            visualization_files['MDS'].append((file, rel_path, file_path))
+                        elif 'topk' in file_lower or 'top_k' in file_lower or 'top-k' in file_lower:
+                            visualization_files['Top-K'].append((file, rel_path, file_path))
+                        elif 'tennis' in file_lower or 'court' in file_lower:
+                            visualization_files['Tennis Court'].append((file, rel_path, file_path))
+                        elif 'inequality' in file_lower:
+                            visualization_files['Inequality Matrices'].append((file, rel_path, file_path))
+                        else:
+                            visualization_files['Other'].append((file, rel_path, file_path))
+            
+            # Download button at the top
+            if all_files_for_download:
+                import zipfile
+                from io import BytesIO
+                
+                col_download, col_info = st.columns([1, 3])
+                with col_download:
+                    # Create ZIP file
+                    zip_buffer = BytesIO()
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        for rel_path, full_path in all_files_for_download:
+                            zip_file.write(full_path, rel_path)
+                    
+                    zip_buffer.seek(0)
+                    st.download_button(
+                        label="� Download All Results (ZIP)",
+                        data=zip_buffer,
+                        file_name=f"SAM_Results_{time.strftime('%Y%m%d_%H%M%S')}.zip",
+                        mime="application/zip",
+                        type="primary",
+                        use_container_width=True
+                    )
+                
+                with col_info:
+                    total_size = sum(os.path.getsize(fp) for _, fp in all_files_for_download)
+                    st.info(f"📊 {len(all_files_for_download)} files ready • 💾 {total_size / 1024 / 1024:.2f} MB total")
+            
+            st.markdown("---")
+            
+            # Display visualizations by category
+            non_empty_categories = {k: v for k, v in visualization_files.items() if v}
+            
+            if non_empty_categories:
+                for category, files in non_empty_categories.items():
+                    st.markdown(f"### {category}")
+                    st.markdown(f"*{len(files)} visualization(s)*")
+                    
+                    # Create columns for images (2 per row)
+                    for i in range(0, len(files), 2):
+                        cols = st.columns(2)
+                        for j, col in enumerate(cols):
+                            if i + j < len(files):
+                                filename, rel_path, file_path = files[i + j]
+                                with col:
+                                    st.image(file_path, caption=filename, use_container_width=True)
+                    
+                    st.markdown("---")
+            else:
+                st.info("📭 No visualization files (PNG) found. Other results may be available in the download.")
+        
+        except Exception as e:
+            st.error(f"❌ Error loading results: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+    else:
+        st.warning(f"⚠️ Results directory does not exist: {browse_results_dir}")
 
 # Footer
 st.markdown("---")
