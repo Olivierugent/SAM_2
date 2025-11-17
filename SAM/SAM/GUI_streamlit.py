@@ -51,6 +51,8 @@ if 'analysis_params' not in st.session_state:
     st.session_state.analysis_params = None
 if 'results_directory' not in st.session_state:
     st.session_state.results_directory = None
+if 'expand_all_images' not in st.session_state:
+    st.session_state.expand_all_images = True  # Default: show all images
 
 # Password configuration (you can change this or use environment variable)
 CORRECT_PASSWORD = os.environ.get('APP_PASSWORD', 'SAM2024')  # Default password or set via environment
@@ -688,19 +690,56 @@ if current_status == 'finished' and st.session_state.last_output:
 
 # Auto-refresh while running with helpful info
 if current_status in ['running', 'starting']:
-    # Show live output in expander
-    with st.expander("📟 Live Output Log", expanded=False):
+    # Parse timing information from output
+    time_info = ""
+    if st.session_state.last_output:
+        # Extract elapsed time from last "Time elapsed" line
+        lines = st.session_state.last_output.split('\n')
+        elapsed_times = [l for l in lines if 'Time elapsed for running module' in l or 'Total time elapsed' in l]
+        if elapsed_times:
+            last_time = elapsed_times[-1]
+            time_info = f"⏱️ {last_time.strip()}"
+    
+    # Show live output in expander with time info
+    expander_title = "📟 Live Output Log"
+    if time_info:
+        expander_title += f" - {time_info}"
+    
+    with st.expander(expander_title, expanded=True):
         if st.session_state.last_output:
-            st.code(st.session_state.last_output[-3000:], language='text')  # Last 3000 chars
+            # Show last 5000 chars for better context
+            output_display = st.session_state.last_output[-5000:]
+            st.code(output_display, language='text')
+            
+            # Add helpful info about progress
+            if 'STARTING PDP: FUNDAMENTAL' in st.session_state.last_output:
+                st.info("🔄 Processing Fundamental PDP - This may take a few minutes...")
+            elif 'STARTING PDP: BUFFER' in st.session_state.last_output:
+                st.info("🔄 Processing Buffer PDP - About halfway through...")
+            elif 'ALL PDP PROCESSING COMPLETE' in st.session_state.last_output:
+                st.success("✅ All processing complete!")
         else:
             st.info("⏳ Waiting for output...")
     
     time.sleep(2)  # Refresh every 2 seconds
     st.rerun()
 
-# Output display (when not running)
-elif st.session_state.last_output and current_status in ['finished', 'error']:
-    with st.expander("📄 Analysis Output Log", expanded=(current_status == 'error')):
+# Output display (when not running) - Always show if there's output
+elif st.session_state.last_output:
+    # Determine if we should expand by default
+    expand_by_default = current_status in ['finished', 'error']
+    
+    # Parse timing information from output for finished state
+    time_info = ""
+    if current_status == 'finished':
+        lines = st.session_state.last_output.split('\n')
+        total_time_lines = [l for l in lines if 'Total time elapsed' in l]
+        if total_time_lines:
+            time_info = f" - {total_time_lines[-1].strip()}"
+    
+    expander_title = "📄 Analysis Output Log" + time_info
+    
+    with st.expander(expander_title, expanded=expand_by_default):
         st.code(st.session_state.last_output, language='text')
 
 # ============================================================================
@@ -721,7 +760,16 @@ elif st.session_state.results_directory and os.path.exists(st.session_state.resu
 
 if show_results:
     st.markdown("---")
-    st.markdown("## 🎨 Analysis Results - Visualizations")
+    
+    # Header with expand/collapse button
+    col_title, col_button = st.columns([3, 1])
+    with col_title:
+        st.markdown("## 🎨 Analysis Results - Visualizations")
+    with col_button:
+        button_label = "📦 Collapse All" if st.session_state.expand_all_images else "📂 Expand All"
+        if st.button(button_label, use_container_width=True):
+            st.session_state.expand_all_images = not st.session_state.expand_all_images
+            st.rerun()
     
     browse_results_dir = st.session_state.results_directory
     
@@ -809,17 +857,16 @@ if show_results:
             
             if non_empty_categories:
                 for category, files in non_empty_categories.items():
-                    st.markdown(f"### {category}")
-                    st.markdown(f"*{len(files)} visualization(s)*")
-                    
-                    # Create columns for images (2 per row)
-                    for i in range(0, len(files), 2):
-                        cols = st.columns(2)
-                        for j, col in enumerate(cols):
-                            if i + j < len(files):
-                                filename, rel_path, file_path = files[i + j]
-                                with col:
-                                    st.image(file_path, caption=filename, use_container_width=True)
+                    # Use expander for each category
+                    with st.expander(f"### {category} ({len(files)} files)", expanded=st.session_state.expand_all_images):
+                        # Create columns for images (2 per row)
+                        for i in range(0, len(files), 2):
+                            cols = st.columns(2)
+                            for j, col in enumerate(cols):
+                                if i + j < len(files):
+                                    filename, rel_path, file_path = files[i + j]
+                                    with col:
+                                        st.image(file_path, caption=filename, use_container_width=True)
                     
                     st.markdown("---")
             else:
