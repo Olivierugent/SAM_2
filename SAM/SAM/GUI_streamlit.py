@@ -206,21 +206,21 @@ with col1:
     st.checkbox("🔹 Fundamental (required)", value=True, disabled=True, key='pdp_fundamental')
     
     # Optional PDP types
-    pdp_buffer = st.checkbox("🔸 Buffer", value=av.PDPg_buffer == 1, key='pdp_buffer')
-    pdp_rough = st.checkbox("🔶 Rough", value=av.PDPg_rough == 1, key='pdp_rough')
-    pdp_bufferrough = st.checkbox("🔷 Buffer + Rough", value=av.PDPg_bufferrough == 1, key='pdp_bufferrough')
+    pdp_buffer = st.checkbox("🔸 Buffer", value=getattr(av, 'PDPg_buffer', 1) == 1, key='pdp_buffer')
+    pdp_rough = st.checkbox("🔶 Rough", value=getattr(av, 'PDPg_rough', 0) == 1, key='pdp_rough')
+    pdp_bufferrough = st.checkbox("🔷 Buffer + Rough", value=getattr(av, 'PDPg_bufferrough', 0) == 1, key='pdp_bufferrough')
     
     st.markdown("### 🔢 Core Parameters")
-    window_length_tst = st.number_input("⏱️ window_length_tst", value=av.window_length_tst, min_value=1, step=1)
+    window_length_tst = st.number_input("⏱️ window_length_tst", value=getattr(av, 'window_length_tst', 3), min_value=1, step=1)
     
     st.markdown("### 📏 Buffer / Rough Parameters")
     col1a, col1b = st.columns(2)
     with col1a:
-        buffer_x = st.number_input("↔️ buffer_x", value=av.buffer_x, disabled=not pdp_buffer and not pdp_bufferrough)
-        rough_x = st.number_input("↔️ rough_x", value=av.rough_x, disabled=not pdp_rough and not pdp_bufferrough)
+        buffer_x = st.number_input("↔️ buffer_x", value=getattr(av, 'buffer_x', 1), disabled=not pdp_buffer and not pdp_bufferrough)
+        rough_x = st.number_input("↔️ rough_x", value=getattr(av, 'rough_x', 0), disabled=not pdp_rough and not pdp_bufferrough)
     with col1b:
-        buffer_y = st.number_input("↕️ buffer_y", value=av.buffer_y, disabled=not pdp_buffer and not pdp_bufferrough)
-        rough_y = st.number_input("↕️ rough_y", value=av.rough_y, disabled=not pdp_rough and not pdp_bufferrough)
+        buffer_y = st.number_input("↕️ buffer_y", value=getattr(av, 'buffer_y', 1), disabled=not pdp_buffer and not pdp_bufferrough)
+        rough_y = st.number_input("↕️ rough_y", value=getattr(av, 'rough_y', 0), disabled=not pdp_rough and not pdp_bufferrough)
 
 # ============================================================================
 # COLUMN 2: Visualization & Analysis Modules
@@ -299,11 +299,11 @@ with col3:
         st.markdown("### 🗺️ Spatial Bounds")
         col3a, col3b = st.columns(2)
         with col3a:
-            min_boundary_x = st.number_input("⬅️ min_x", value=av.min_boundary_x)
-            min_boundary_y = st.number_input("⬇️ min_y", value=av.min_boundary_y)
+            min_boundary_x = st.number_input("⬅️ min_x", value=getattr(av, 'min_boundary_x', -5))
+            min_boundary_y = st.number_input("⬇️ min_y", value=getattr(av, 'min_boundary_y', -5))
         with col3b:
-            max_boundary_x = st.number_input("➡️ max_x", value=av.max_boundary_x)
-            max_boundary_y = st.number_input("⬆️ max_y", value=av.max_boundary_y)
+            max_boundary_x = st.number_input("➡️ max_x", value=getattr(av, 'max_boundary_x', 15))
+            max_boundary_y = st.number_input("⬆️ max_y", value=getattr(av, 'max_boundary_y', 30))
         
         st.markdown("### 🔧 Other Parameters")
         DD = st.number_input("📐 DD", value=getattr(av, 'DD', 2), min_value=1)
