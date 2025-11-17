@@ -33,6 +33,8 @@ os.environ.setdefault('AV_SKIP_LOAD', '1')
 import av
 
 # Initialize session state for persistent data
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
 if 'run_thread' not in st.session_state:
     st.session_state.run_thread = None
 if 'last_status' not in st.session_state:
@@ -45,6 +47,79 @@ if 'analysis_finished' not in st.session_state:
     st.session_state.analysis_finished = False
 if 'log_file_path' not in st.session_state:
     st.session_state.log_file_path = None
+
+# Password configuration (you can change this or use environment variable)
+CORRECT_PASSWORD = os.environ.get('APP_PASSWORD', 'GIST')  # Default password or set via environment
+
+
+# Password configuration (you can change this or use environment variable)
+CORRECT_PASSWORD = os.environ.get('APP_PASSWORD', 'GIST')  # Default password or set via environment
+
+
+def check_password():
+    """
+    Returns True if the user has entered the correct password.
+    Displays a login form if not authenticated.
+    """
+    if st.session_state.authenticated:
+        return True
+    
+    # Show login form
+    st.markdown("""
+        <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 40px; border-radius: 12px; color: white; margin-bottom: 20px;
+                    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4); text-align: center;'>
+            <h1 style='margin: 0 0 16px 0; font-size: 42px;'>🔒 SAM Analysis Platform</h1>
+            <p style='font-size: 18px; opacity: 0.95; margin: 0;'>
+                Please enter your password to access the dashboard
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Center the login form
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("### 🔐 Login")
+        
+        # Password input
+        password = st.text_input("Password", type="password", key="password_input")
+        
+        col_login, col_space = st.columns([1, 1])
+        with col_login:
+            if st.button("🚀 Login", type="primary", use_container_width=True):
+                if password == CORRECT_PASSWORD:
+                    st.session_state.authenticated = True
+                    st.success("✅ Login successful!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("❌ Incorrect password. Please try again.")
+        
+        st.markdown("---")
+        st.info("💡 **Tip:** Contact your administrator if you've forgotten your password.")
+        
+        # Optional: Show environment hint for deployment
+        if os.environ.get('APP_PASSWORD'):
+            st.caption("🔒 Password is configured via environment variable")
+        else:
+            st.caption("⚠️ Using default password. Set APP_PASSWORD environment variable for production.")
+    
+    return False
+
+
+# ============================================================================
+# PASSWORD CHECK - Must pass before showing main app
+# ============================================================================
+if not check_password():
+    st.stop()  # Stop execution if not authenticated
+
+# Logout button in sidebar
+with st.sidebar:
+    st.markdown("---")
+    if st.button("🚪 Logout", type="secondary", use_container_width=True):
+        st.session_state.authenticated = False
+        st.rerun()
 
 
 def run_moving_objects_in_background(params):
