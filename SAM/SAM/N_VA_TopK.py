@@ -114,8 +114,8 @@ for i in range(av.con):
     ax.spines['right'].set_visible(False)  # Hide the right spine (y-axis)
     plt.bar(labels, sorted_values, color='white', edgecolor='black')  # Create bar graph with white bars and black borders
     plt.gca().set_facecolor('white')  # Get the current axes
-    plt.xlabel('Con', fontsize=20, fontname='Arial')  # Add x-axis label
-    plt.ylabel('Distance', fontsize=20, fontname='Arial')  # Add y-axis label
+    plt.xlabel('Con', fontsize=20)  # Add x-axis label
+    plt.ylabel('Distance', fontsize=20)  # Add y-axis label
     ax.set_ylim(0, 100)  # Set the y-axis limits
     y_ticks = np.arange(0, 110, 10)  # Generate y-ticks at intervals of 10
     plt.yticks(y_ticks, color='black', fontsize=15)  # Set the y-tick labels to black with fontsize 8

@@ -17,6 +17,7 @@ import io
 import contextlib
 import importlib
 from pathlib import Path
+import warnings
 
 # Set page config first (must be first Streamlit command)
 st.set_page_config(
@@ -28,6 +29,19 @@ st.set_page_config(
 
 # Set environment to skip heavy loading during import
 os.environ.setdefault('AV_SKIP_LOAD', '1')
+
+# Configure matplotlib to suppress font warnings and use available fonts
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend
+import matplotlib.pyplot as plt
+
+# Suppress matplotlib font warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
+warnings.filterwarnings('ignore', message='findfont: Font family.*not found')
+
+# Set matplotlib to use DejaVu Sans (available on all systems) instead of Arial
+plt.rcParams['font.family'] = 'DejaVu Sans'
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
 
 # Import av to get defaults
 import av
